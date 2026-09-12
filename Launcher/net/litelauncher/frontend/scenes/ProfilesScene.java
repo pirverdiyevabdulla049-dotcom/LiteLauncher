@@ -45,6 +45,7 @@ public final class ProfilesScene extends PopupScene {
 
     private boolean opened;
     private boolean authRunning;
+    private boolean offlineActionArmed;
 
     public ProfilesScene(MainScene host) {
         super(host, "popup.profiles.title", "popup.profiles.subtitle");
@@ -122,6 +123,7 @@ public final class ProfilesScene extends PopupScene {
     }
 
     private void drawBottomControls(PixelGraphics graphics) {
+        syncActionButtonState();
         PixelSurface surface = PixelPainter.direct(graphics);
 
         PixelPainter.drawElement(surface, 130, 243, 180, 48,
@@ -252,13 +254,24 @@ public final class ProfilesScene extends PopupScene {
     private void refreshLanguageTexts() {
         offlineInput.setPlaceholder(I18n.text("profiles.offlineUsername"));
         enterText.setText(I18n.text("profiles.enter"));
-        microsoftText.setText(I18n.text("profiles.microsoftSignIn"));
         emptyAccountText.setText(I18n.text("profiles.emptyAccount"));
         buyMinecraftText.setText(I18n.text("profiles.buyMinecraft"));
+        syncActionButtonState();
+    }
+
+    private boolean offlineActionMode() {
+        return offlineInput.isActive() || !offlineInput.getValue().isBlank() || offlineActionArmed;
+    }
+
+    private void syncActionButtonState() {
+        boolean offlineMode = offlineActionMode();
+        microsoftText.setText(I18n.text(offlineMode ? "profiles.addOfflineAccount" : "profiles.microsoftSignIn"));
+        microsoftButton.setEnabled(!authRunning && (!offlineMode || offlineInput.getValue().trim().length() >= 3));
     }
 
     @Override
     public boolean handleInput(MouseState mouse) {
+        syncActionButtonState();
         boolean dirty = accountList.handleInput(mouse, false);
 
         int count = store.profiles().size();
@@ -270,7 +283,14 @@ public final class ProfilesScene extends PopupScene {
 
         if (store.profiles().isEmpty()) dirty |= buyMinecraftButton.handleInput(mouse);
 
+        if (offlineInput.isActive() && mouse.isLeftPressed()
+                && microsoftButton.contains(mouse.getLogicalX(), mouse.getLogicalY())
+                && microsoftButton.isEnabled()) {
+            offlineActionArmed = true;
+        }
+
         dirty |= offlineInput.handleInput(mouse);
+        syncActionButtonState();
         if (!authRunning) dirty |= microsoftButton.handleInput(mouse);
 
         for (int index = 0; index < count; index++) {
@@ -301,8 +321,17 @@ public final class ProfilesScene extends PopupScene {
         }
 
         if (!authRunning && microsoftButton.consumeClick()) {
-            signInWithMicrosoft();
+            boolean addOffline = offlineActionMode();
+            offlineActionArmed = false;
+            if (addOffline) addOfflineAccount();
+            else signInWithMicrosoft();
             return true;
+        }
+
+        if (mouse.isLeftReleased() && offlineActionArmed) {
+            offlineActionArmed = false;
+            syncActionButtonState();
+            dirty = true;
         }
 
         return dirty;
@@ -313,6 +342,7 @@ public final class ProfilesScene extends PopupScene {
         super.onOpen();
         opened = true;
         authRunning = false;
+        offlineActionArmed = false;
         try {
             store.openMicrosoftCallbackServer();
         } catch (Exception exception) {
@@ -325,6 +355,7 @@ public final class ProfilesScene extends PopupScene {
     public void onClose() {
         opened = false;
         authRunning = false;
+        offlineActionArmed = false;
         store.closeMicrosoftCallbackServer();
         super.onClose();
         offlineInput.blur();

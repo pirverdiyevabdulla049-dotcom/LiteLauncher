@@ -162,6 +162,10 @@ public final class InputField implements Animated {
         return activeField == this;
     }
 
+    public boolean isActive() {
+        return active();
+    }
+
     public void setAnimationEnabled(boolean enabled) {
         if (animationEnabled == enabled) return;
 
